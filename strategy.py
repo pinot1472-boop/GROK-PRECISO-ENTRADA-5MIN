@@ -173,6 +173,32 @@ def box_stats(h, l, level: float, atr: float, end: int, look: int, is_res: bool)
     return int(age), int(touches)
 
 
+
+def clock_pulse_score() -> tuple[int, str]:
+    """
+    Edge microestructura (Kim & Hansen, arXiv 2607.09426):
+    Los perps muestran bursts algorítmicos en :00/:15/:30/:45.
+    Entrar EN el burst es caro y ruidoso; 2–10 min DESPUÉS suele
+    dejar la estructura (sweep/reject) más legible. Nadie en retail
+    IPDA usa el reloj de cuarto de hora como filtro de ejecución.
+    """
+    if not getattr(config, "USE_CLOCK_PULSE", True):
+        return 0, "off"
+    import time as _t
+    sec = int(_t.time()) % 3600
+    # minutos dentro de la hora
+    minute = (sec // 60) % 60
+    # distancia al último cuarto de hora
+    last_q = (minute // 15) * 15
+    mins_after = minute - last_q
+    secs_after = sec % 900  # 0..899 within quarter
+    if secs_after <= 90:
+        return -int(getattr(config, "CLOCK_PENALTY", 6)), "PULSE"
+    if 2 <= mins_after <= 10:
+        return int(getattr(config, "CLOCK_BOOST", 10)), "POST"
+    return 0, "mid"
+
+
 def analyze(
     symbol: str,
     rows: list[dict],
@@ -467,19 +493,45 @@ def analyze(
             return float(np.mean(tr[i - n + 1 : i + 1]))
         a_s, a_l = _atr_n(cs), _atr_n(cl)
         compress = (a_s / a_l) if a_l > 0 else 1.0
-        # estaba comprimido y ahora hay RVOL → bonus
         if compress <= 0.75 and rvol_sw >= getattr(config, "EXPAND_RVOL", 1.25):
             score += 8
+
+    # v8 · clock pulse microestructura
+    clk_pts, clk_tag = clock_pulse_score()
+    score += clk_pts
+
+    # v8 · residual momentum vs BTC (dirección del residual reciente)
+    if getattr(config, "USE_RESID_MOM", True) and btc_closes is not None:
+        nb = int(getattr(config, "RESID_MOM_BARS", 6))
+        if i >= nb and len(btc_closes) > nb + 2:
+            try:
+                alt_r = float(c[i] / c[i - nb] - 1.0)
+                btc_r = float(btc_closes[-2] / btc_closes[-2 - nb] - 1.0)
+                r_mom = alt_r - btc_r
+                boost = int(getattr(config, "RESID_MOM_BOOST", 8))
+                # GRAB/PIN a favor del residual (continuación del idiosincrático)
+                if src in ("GRAB", "PIN", "CONT"):
+                    if side == "LONG" and r_mom > 0:
+                        score += boost
+                    elif side == "SHORT" and r_mom < 0:
+                        score += boost
+                    elif side == "LONG" and r_mom < -0.01:
+                        score -= boost // 2
+                    elif side == "SHORT" and r_mom > 0.01:
+                        score -= boost // 2
+            except Exception:
+                pass
+
     score = int(max(0, min(100, score)))
 
     min_needed = config.MIN_SCORE + (sess_adj if config.USE_SESSION_RULES else 0)
-    # corte blando aquí; el duro en apply_cross_sectional + meta
-    if score < max(28, min_needed - 22):
+    # corte más permisivo v8: deja pasar candidatos para ranking cross-sectional
+    if score < max(22, min_needed - 28):
         return None
 
     reason = (
         f"{src}{'·2nd' if second_test_hit else ''} RVOL {rvol_sw:.2f}x · age {box_age}t{box_touches} · "
-        f"resid {resid:+.2f}% · {sess} · fund {mins_f:.0f}m"
+        f"resid {resid:+.2f}% · {sess} · fund {mins_f:.0f}m · clk {clk_tag}"
     )
     return Signal(
         symbol=symbol,

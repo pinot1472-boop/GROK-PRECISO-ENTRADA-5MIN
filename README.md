@@ -1,4 +1,4 @@
-# IPDA BingX Bot
+# IPDA BingX Bot v8
 
 Bot de señales (y opcionalmente ejecución) para **cripto perps BingX**, con lógica **IPDA**:
 
@@ -127,3 +127,23 @@ CONFIRM_INTERVAL=5m
 ```
 
 Si `CONFIRM_REQUIRED=false`, avisa igual pero marca `espera (...)` cuando 5m no confirma.
+
+
+## v8 · por qué ahora sí da señales + edge nuevo
+
+### Relajaciones (antes bloqueaban todo)
+- `MIN_SCORE` 48 → **42**
+- `SWEEP_RVOL` 1.10 → **1.00**
+- `XSEC_RVOL_PCT` 55 → **45**
+- `CONFIRM_REQUIRED` **false** (modo soft: avisa con penalización si 5m no confirma)
+- wick/body/dist 5m más tolerantes
+
+### Edge novedoso: **Clock Pulse** (Kim & Hansen 2026, arXiv)
+Los perps tienen bursts algorítmicos cada :00/:15/:30/:45.
+- **+10 score** si estás 2–10 min *después* del pulso (estructura legible)
+- **−6 score** en los primeros 90s del burst (ruido + peor fill)
+
+Casi ningún bot retail IPDA usa el reloj de cuarto de hora como filtro de ejecución.
+
+### Residual momentum corto
+Alinea GRAB/PIN con el residual vs BTC de las últimas 6 velas 15m.

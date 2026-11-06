@@ -85,9 +85,8 @@ def confirm_entry(
         rejection = (
             near
             and lower_w >= min_wick
-            and body >= min_body * 0.5
-            and c[i] >= level
-            and c[i] > o[i]
+            and c[i] >= level - 0.15 * atr
+            and (c[i] > o[i] or lower_w >= min_wick * 1.4)
         )
         # aceptación (CONT): cierre claro por encima
         accept = (
@@ -113,9 +112,8 @@ def confirm_entry(
         rejection = (
             near
             and upper_w >= min_wick
-            and body >= min_body * 0.5
-            and c[i] <= level
-            and c[i] < o[i]
+            and c[i] <= level + 0.15 * atr
+            and (c[i] < o[i] or upper_w >= min_wick * 1.4)
         )
         accept = (
             src_u in ("CONT", "BREAK", "RUPTURA")

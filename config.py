@@ -62,17 +62,17 @@ LOOKBACK_B = _int("LOOKBACK_B", 40)
 SWEEP_WIN = _int("SWEEP_WIN", 3)
 MIN_DEP_ATR = _float("MIN_DEP_ATR", 0.02)
 MAX_DEP_ATR = _float("MAX_DEP_ATR", 0.55)
-SWEEP_RVOL = _float("SWEEP_RVOL", 1.10)
+SWEEP_RVOL = _float("SWEEP_RVOL", 1.00)
 ACC_BARS = _int("ACC_BARS", 2)
 NEAR_ATR = _float("NEAR_ATR", 0.45)
-MIN_SCORE = _int("MIN_SCORE", 48)
+MIN_SCORE = _int("MIN_SCORE", 42)
 ALLOW_LONG = _bool("ALLOW_LONG", True)
 ALLOW_SHORT = _bool("ALLOW_SHORT", True)
 ATR_LEN = _int("ATR_LEN", 14)
 VOL_LEN = _int("VOL_LEN", 20)
 
 USE_XSEC_RVOL = _bool("USE_XSEC_RVOL", True)
-XSEC_RVOL_PCT = _float("XSEC_RVOL_PCT", 55.0)
+XSEC_RVOL_PCT = _float("XSEC_RVOL_PCT", 45.0)
 USE_BTC_LEAD = _bool("USE_BTC_LEAD", True)
 BTC_LEAD_STRICT = _bool("BTC_LEAD_STRICT", False)
 BTC_SYMBOL = os.getenv("BTC_SYMBOL", "BTC-USDT").strip()
@@ -171,10 +171,26 @@ COND_FUND_EXTREME = _float("COND_FUND_EXTREME", 0.03)  # %
 # ── Confirmación 5m (entrada precisa) ───────────────────────────────
 USE_CONFIRM_5M = _bool("USE_CONFIRM_5M", True)
 CONFIRM_INTERVAL = _str("CONFIRM_INTERVAL", "5m")
-CONFIRM_MAX_DIST_ATR = _float("CONFIRM_MAX_DIST_ATR", 0.55)
-CONFIRM_MIN_WICK_ATR = _float("CONFIRM_MIN_WICK_ATR", 0.20)
-CONFIRM_MIN_BODY_ATR = _float("CONFIRM_MIN_BODY_ATR", 0.15)
-CONFIRM_RVOL_MIN = _float("CONFIRM_RVOL_MIN", 1.10)
+CONFIRM_MAX_DIST_ATR = _float("CONFIRM_MAX_DIST_ATR", 0.75)
+CONFIRM_MIN_WICK_ATR = _float("CONFIRM_MIN_WICK_ATR", 0.12)
+CONFIRM_MIN_BODY_ATR = _float("CONFIRM_MIN_BODY_ATR", 0.08)
+CONFIRM_RVOL_MIN = _float("CONFIRM_RVOL_MIN", 0.90)
 CONFIRM_SL_PAD_ATR = _float("CONFIRM_SL_PAD_ATR", 0.12)
 # Si True: sin confirmación 5m no se envía señal ni se opera
-CONFIRM_REQUIRED = _bool("CONFIRM_REQUIRED", True)
+CONFIRM_REQUIRED = _bool("CONFIRM_REQUIRED", False)
+
+
+# ── v8 · edges novedosos ────────────────────────────────────────────
+# Quarter-hour clock pulse (Kim & Hansen 2026): bursts at :00/:15/:30/:45
+# Preferimos entradas 2–10 min DESPUÉS del pulso (estructura limpia post-algo)
+USE_CLOCK_PULSE = _bool("USE_CLOCK_PULSE", True)
+CLOCK_BOOST = _int("CLOCK_BOOST", 10)
+CLOCK_PENALTY = _int("CLOCK_PENALTY", 6)  # dentro de los primeros 90s del pulso
+# Residual momentum corto (retorno residual vs BTC, 4–8 barras 15m)
+USE_RESID_MOM = _bool("USE_RESID_MOM", True)
+RESID_MOM_BARS = _int("RESID_MOM_BARS", 6)
+RESID_MOM_BOOST = _int("RESID_MOM_BOOST", 8)
+# Soft-confirm: si 5m no confirma, aún avisa con score penalizado
+CONFIRM_SOFT_PENALTY = _int("CONFIRM_SOFT_PENALTY", 12)
+# Diagnose: log top near-misses every cycle
+LOG_NEAR_MISSES = _bool("LOG_NEAR_MISSES", True)
