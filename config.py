@@ -61,26 +61,26 @@ LOOKBACK_A = _int("LOOKBACK_A", 20)
 LOOKBACK_B = _int("LOOKBACK_B", 40)
 SWEEP_WIN = _int("SWEEP_WIN", 3)
 MIN_DEP_ATR = _float("MIN_DEP_ATR", 0.02)
-MAX_DEP_ATR = _float("MAX_DEP_ATR", 0.55)
-SWEEP_RVOL = _float("SWEEP_RVOL", 1.00)
+MAX_DEP_ATR = _float("MAX_DEP_ATR", 0.45)
+SWEEP_RVOL = _float("SWEEP_RVOL", 1.15)
 ACC_BARS = _int("ACC_BARS", 2)
-NEAR_ATR = _float("NEAR_ATR", 0.45)
-MIN_SCORE = _int("MIN_SCORE", 42)
+NEAR_ATR = _float("NEAR_ATR", 0.35)
+MIN_SCORE = _int("MIN_SCORE", 55)
 ALLOW_LONG = _bool("ALLOW_LONG", True)
 ALLOW_SHORT = _bool("ALLOW_SHORT", True)
 ATR_LEN = _int("ATR_LEN", 14)
 VOL_LEN = _int("VOL_LEN", 20)
 
 USE_XSEC_RVOL = _bool("USE_XSEC_RVOL", True)
-XSEC_RVOL_PCT = _float("XSEC_RVOL_PCT", 45.0)
+XSEC_RVOL_PCT = _float("XSEC_RVOL_PCT", 70.0)
 USE_BTC_LEAD = _bool("USE_BTC_LEAD", True)
 BTC_LEAD_STRICT = _bool("BTC_LEAD_STRICT", False)
 BTC_SYMBOL = os.getenv("BTC_SYMBOL", "BTC-USDT").strip()
 USE_FUNDING_EDGE = _bool("USE_FUNDING_EDGE", True)
-ABSORB_RVOL = _float("ABSORB_RVOL", 1.50)
+ABSORB_RVOL = _float("ABSORB_RVOL", 9.0)
 ABSORB_BODY = _float("ABSORB_BODY", 0.35)
-MAX_SIGNALS_CYCLE = _int("MAX_SIGNALS_CYCLE", 3)
-USE_PINBAR_FALLBACK = _bool("USE_PINBAR_FALLBACK", True)
+MAX_SIGNALS_CYCLE = _int("MAX_SIGNALS_CYCLE", 2)
+USE_PINBAR_FALLBACK = _bool("USE_PINBAR_FALLBACK", False)
 
 USE_BOX_AGE = _bool("USE_BOX_AGE", True)
 BOX_AGE_MIN = _int("BOX_AGE_MIN", 3)
@@ -127,7 +127,7 @@ LOSS_SCORE_BUMP = _int("LOSS_SCORE_BUMP", 8)
 RISK_PCT = _float("RISK_PCT", 0.85)
 MAX_LEVERAGE = _float("MAX_LEVERAGE", 5.0)
 SL_ATR = _float("SL_ATR", 0.35)
-TP1_R = _float("TP1_R", 1.0)
+TP1_R = _float("TP1_R", 1.2)
 TP2_R = _float("TP2_R", 2.0)
 MAX_TRADES_DAY = _int("MAX_TRADES_DAY", 4)
 MAX_LOSSES_DAY = _int("MAX_LOSSES_DAY", 2)
@@ -171,13 +171,13 @@ COND_FUND_EXTREME = _float("COND_FUND_EXTREME", 0.03)  # %
 # ── Confirmación 5m (entrada precisa) ───────────────────────────────
 USE_CONFIRM_5M = _bool("USE_CONFIRM_5M", True)
 CONFIRM_INTERVAL = _str("CONFIRM_INTERVAL", "5m")
-CONFIRM_MAX_DIST_ATR = _float("CONFIRM_MAX_DIST_ATR", 0.75)
-CONFIRM_MIN_WICK_ATR = _float("CONFIRM_MIN_WICK_ATR", 0.12)
-CONFIRM_MIN_BODY_ATR = _float("CONFIRM_MIN_BODY_ATR", 0.08)
-CONFIRM_RVOL_MIN = _float("CONFIRM_RVOL_MIN", 0.90)
+CONFIRM_MAX_DIST_ATR = _float("CONFIRM_MAX_DIST_ATR", 0.40)
+CONFIRM_MIN_WICK_ATR = _float("CONFIRM_MIN_WICK_ATR", 0.18)
+CONFIRM_MIN_BODY_ATR = _float("CONFIRM_MIN_BODY_ATR", 0.12)
+CONFIRM_RVOL_MIN = _float("CONFIRM_RVOL_MIN", 1.05)
 CONFIRM_SL_PAD_ATR = _float("CONFIRM_SL_PAD_ATR", 0.12)
 # Si True: sin confirmación 5m no se envía señal ni se opera
-CONFIRM_REQUIRED = _bool("CONFIRM_REQUIRED", False)
+CONFIRM_REQUIRED = _bool("CONFIRM_REQUIRED", True)
 
 
 # ── v8 · edges novedosos ────────────────────────────────────────────
@@ -194,3 +194,27 @@ RESID_MOM_BOOST = _int("RESID_MOM_BOOST", 8)
 CONFIRM_SOFT_PENALTY = _int("CONFIRM_SOFT_PENALTY", 12)
 # Diagnose: log top near-misses every cycle
 LOG_NEAR_MISSES = _bool("LOG_NEAR_MISSES", True)
+
+
+# ── v9 · filtro por papel (solo lo que no destroza E) ───────────────
+# Solo GRAB: CONT y PIN tenían E muy negativa en el seguimiento
+ALLOWED_SRC = os.getenv("ALLOWED_SRC", "GRAB").strip().upper()  # CSV: GRAB o GRAB,PIN
+USE_CONT = _bool("USE_CONT", False)
+REQUIRE_NEAR_LEVEL = _bool("REQUIRE_NEAR_LEVEL", True)
+MIN_XSEC_PCT = _float("MIN_XSEC_PCT", 70.0)  # p70+ del ranking RVOL del ciclo
+DISABLE_ABSORB_BOOST = _bool("DISABLE_ABSORB_BOOST", True)
+REQUIRE_CLOCK_POST = _bool("REQUIRE_CLOCK_POST", False)  # si true, solo ventana POST
+REQUIRE_BTC_ALIGN = _bool("REQUIRE_BTC_ALIGN", False)
+
+
+# ── v10 · Asia range (00:00–08:00 UTC) como pool de liquidez ────────
+USE_ASIA_RANGE = _bool("USE_ASIA_RANGE", True)
+ASIA_START_HOUR = _int("ASIA_START_HOUR", 0)   # UTC inclusive
+ASIA_END_HOUR = _int("ASIA_END_HOUR", 8)       # UTC exclusive (range fixed at 08:00)
+ASIA_MIN_WIDTH_PCT = _float("ASIA_MIN_WIDTH_PCT", 1.5)
+ASIA_MAX_WIDTH_PCT = _float("ASIA_MAX_WIDTH_PCT", 12.0)
+ASIA_GRAB_BOOST = _int("ASIA_GRAB_BOOST", 12)  # score si el GRAB es sobre Asia H/L
+ASIA_NEAR_ATR = _float("ASIA_NEAR_ATR", 0.40)  # proximidad al nivel Asia
+ASIA_ONLY = _bool("ASIA_ONLY", False)          # si true, solo opera GRAB sobre Asia
+ENTRY_CUTOFF_HOUR = _int("ENTRY_CUTOFF_HOUR", 20)  # no nuevas entradas desde esta hora UTC
+USE_ENTRY_CUTOFF = _bool("USE_ENTRY_CUTOFF", True)

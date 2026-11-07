@@ -67,7 +67,7 @@ def fmt_sig(s: Signal, mode: str, stress: bool) -> str:
     sec = " · 🎯 2º TOQUE" if getattr(s, "second_test", False) else ""
     st = " · ⚠ STRESS" if stress else ""
     return (
-        f"<b>IPDA v8 · {arrow}</b> · {live}{abs_t}{sec}{st}\n"
+        f"<b>IPDA v10 · {arrow}</b> · {live}{abs_t}{sec}{st}\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
         f"Par: <b>{s.symbol}</b>\n"
         f"Origen: {s.src} · Score <b>{s.score}/100</b>\n"
@@ -191,7 +191,7 @@ async def maybe_daily_report(tg: Telegram, state: State) -> None:
     by = _cycle_stats.get("by_src") or {}
     src_txt = ", ".join(f"{k}:{v}" for k, v in sorted(by.items())) or "—"
     await tg.send(
-        f"<b>IPDA v8 · Informe diario</b> ({day} UTC)\n"
+        f"<b>IPDA v10 · Informe diario</b> ({day} UTC)\n"
         f"Ciclos: {_cycle_stats['cycles']}\n"
         f"Candidatos: {_cycle_stats['cands']} · Señales: {_cycle_stats['sigs']}\n"
         f"Por origen: {src_txt}\n"
@@ -342,15 +342,13 @@ async def scan_once(bx, tg, state, symbols, mode, funding_map) -> BtcRegime:
                 sig.score = min(100, sig.score + 8)
                 sig.reason = f"{sig.reason} · 5m:{why5}"
             else:
-                sig.confirm_tag = f"soft ({why5})"
-                log.info("5m soft %s %s: %s", sig.symbol, sig.side, why5)
-                if getattr(config, "CONFIRM_REQUIRED", False):
+                sig.confirm_tag = f"espera ({why5})"
+                log.info("5m BLOCK %s %s: %s", sig.symbol, sig.side, why5)
+                if getattr(config, "CONFIRM_REQUIRED", True):
                     continue
-                # Soft mode: avisa igual con score reducido (sigue siendo útil)
                 pen = int(getattr(config, "CONFIRM_SOFT_PENALTY", 12))
                 sig.score = max(0, sig.score - pen)
                 if sig.score < floor:
-                    log.info("5m soft drop %s sc=%s < floor %s", sig.symbol, sig.score, floor)
                     continue
 
         _cycle_stats["by_src"][sig.src] = _cycle_stats["by_src"].get(sig.src, 0) + 1
@@ -413,9 +411,9 @@ async def main() -> None:
         tg = Telegram(client)
         symbols = await pick_symbols(bx)
         await tg.send(
-            f"<b>IPDA v8</b> arrancado\n"
+            f"<b>IPDA v10</b> arrancado\n"
             f"Modo: <b>{mode}</b> · TF {config.TIMEFRAME} · {len(symbols)} sym\n"
-            f"Edges: ClockPulse·ResidMom·OI·Basis·Mem·FundVel·XSec\n"
+            f"Edges: AsiaRange·GRAB-only·NearLevel·ClockPulse·XSec70\n"
             f"Sesión UTC: {session_bucket()} · Fund ~{minutes_to_funding():.0f}m\n"
             f"score≥{config.MIN_SCORE} · stress≥{config.STRESS_PCT:.0f}% → solo GRAB\n"
             f"Informe diario {config.DAILY_REPORT_UTC}:00 UTC"
@@ -447,7 +445,7 @@ async def main() -> None:
                 await asyncio.wait_for(STOP.wait(), timeout=wait)
             except asyncio.TimeoutError:
                 pass
-        await tg.send("🛑 IPDA v8 detenido")
+        await tg.send("🛑 IPDA v10 detenido")
 
 
 if __name__ == "__main__":

@@ -199,6 +199,64 @@ def clock_pulse_score() -> tuple[int, str]:
     return 0, "mid"
 
 
+
+def _bar_hour_utc(ts_ms: int) -> int:
+    """Hour UTC from exchange kline time (ms)."""
+    return int((int(ts_ms) // 1000) % 86400 // 3600)
+
+
+def asia_range_from_rows(rows: list[dict], end_idx: int) -> tuple[float, float, float, bool]:
+    """
+    High/low del rango Asia del día UTC de la vela end_idx.
+    Returns: asia_high, asia_low, width_pct, ready
+    ready=False si aún no cerró la ventana Asia o faltan velas.
+    """
+    if not rows or end_idx < 5:
+        return 0.0, 0.0, 0.0, False
+    start_h = int(getattr(config, "ASIA_START_HOUR", 0))
+    end_h = int(getattr(config, "ASIA_END_HOUR", 8))
+    # día UTC de la barra de referencia (ms → day id)
+    t_ref = int(rows[end_idx].get("time") or 0)
+    if t_ref <= 0:
+        return 0.0, 0.0, 0.0, False
+    day0 = (t_ref // 1000) // 86400  # days since epoch
+    highs, lows = [], []
+    for j in range(max(0, end_idx - 80), end_idx + 1):
+        tj = int(rows[j].get("time") or 0)
+        if tj <= 0:
+            continue
+        dayj = (tj // 1000) // 86400
+        if dayj != day0:
+            continue
+        hj = _bar_hour_utc(tj)
+        if start_h <= hj < end_h:
+            highs.append(float(rows[j]["high"]))
+            lows.append(float(rows[j]["low"]))
+    if len(highs) < 3:
+        return 0.0, 0.0, 0.0, False
+    # Solo "ready" si ya pasamos end_h en ese día
+    h_ref = _bar_hour_utc(t_ref)
+    ready = h_ref >= end_h
+    ah, al = max(highs), min(lows)
+    mid = (ah + al) / 2.0 if ah > al else float(rows[end_idx]["close"])
+    width_pct = ((ah - al) / mid * 100.0) if mid > 0 else 0.0
+    return ah, al, width_pct, ready
+
+
+def width_ok(width_pct: float) -> bool:
+    lo = float(getattr(config, "ASIA_MIN_WIDTH_PCT", 1.5))
+    hi = float(getattr(config, "ASIA_MAX_WIDTH_PCT", 12.0))
+    if width_pct <= 0:
+        return False
+    return lo <= width_pct <= hi
+
+
+def entry_cutoff_blocked() -> bool:
+    if not getattr(config, "USE_ENTRY_CUTOFF", True):
+        return False
+    return utc_hour() >= int(getattr(config, "ENTRY_CUTOFF_HOUR", 20))
+
+
 def analyze(
     symbol: str,
     rows: list[dict],
@@ -224,6 +282,9 @@ def analyze(
 
     i = len(c) - 2
     if i < need - 2:
+        return None
+
+    if entry_cutoff_blocked():
         return None
 
     atr = _atr(h, l, c, config.ATR_LEN)
@@ -316,7 +377,19 @@ def analyze(
 
     if side is None:
         return None
-    # Estrés de universo: no CONT (solo reversiones GRAB/PIN)
+
+    # v9 · solo orígenes permitidos (papel: CONT/B destruían E)
+    allowed = {
+        x.strip().upper()
+        for x in str(getattr(config, "ALLOWED_SRC", "GRAB")).split(",")
+        if x.strip()
+    }
+    if src and src.upper() not in allowed:
+        return None
+    if src == "CONT" and not getattr(config, "USE_CONT", False):
+        return None
+
+    # Estrés de universo: no CONT
     if universe_stress and src == "CONT":
         return None
     if side == "LONG" and not config.ALLOW_LONG:
@@ -383,16 +456,52 @@ def analyze(
         elif box_age < config.BOX_AGE_MIN:
             age_pts += 2  # nivel fresco
 
+    # ── v10 · Asia range como nivel prioritario ──
+    asia_high = asia_low = 0.0
+    asia_w = 0.0
+    asia_ready = False
+    asia_hit = False
+    if getattr(config, "USE_ASIA_RANGE", True):
+        asia_high, asia_low, asia_w, asia_ready = asia_range_from_rows(rows, i)
+        if asia_ready and not width_ok(asia_w):
+            # rango muerto o ya explotado → no trade
+            if getattr(config, "ASIA_ONLY", False):
+                return None
+            # si no ASIA_ONLY, aún puede usar caja 20/40 pero sin bonus Asia
+            asia_ready = False
+        if asia_ready and width_ok(asia_w):
+            near_a = float(getattr(config, "ASIA_NEAR_ATR", 0.40)) * a
+            if side == "SHORT" and src in ("GRAB", "PIN") and asia_high > 0:
+                swept = float(h[i]) >= asia_high - 1e-12
+                near = abs(float(h[i]) - asia_high) <= near_a * 2
+                if (swept or near) and float(c[i]) <= asia_high + 0.15 * a:
+                    asia_hit = True
+                    res = asia_high
+            if side == "LONG" and src in ("GRAB", "PIN") and asia_low > 0:
+                swept = float(l[i]) <= asia_low + 1e-12
+                near = abs(float(l[i]) - asia_low) <= near_a * 2
+                if (swept or near) and float(c[i]) >= asia_low - 0.15 * a:
+                    asia_hit = True
+                    sup = asia_low
+            if getattr(config, "ASIA_ONLY", False) and not asia_hit:
+                return None
+
     entry = float(c[i])
     if side == "LONG":
-        sl = min(sup, float(l[i])) - config.SL_ATR * a
+        if asia_hit and asia_low > 0:
+            sl = min(asia_low, float(l[i])) - config.SL_ATR * a
+        else:
+            sl = min(sup, float(l[i])) - config.SL_ATR * a
         risk = entry - sl
         if risk <= 0 or risk > 3.5 * a:
             return None
         tp1, tp2 = entry + config.TP1_R * risk, entry + config.TP2_R * risk
         dist = abs(entry - sup) / a
     else:
-        sl = max(res, float(h[i])) + config.SL_ATR * a
+        if asia_hit and asia_high > 0:
+            sl = max(asia_high, float(h[i])) + config.SL_ATR * a
+        else:
+            sl = max(res, float(h[i])) + config.SL_ATR * a
         risk = sl - entry
         if risk <= 0 or risk > 3.5 * a:
             return None
@@ -411,8 +520,10 @@ def analyze(
         score += 10
     if src == "CONT":
         score += 6
-    if absorb:
+    if absorb and not getattr(config, "DISABLE_ABSORB_BOOST", True):
         score += 8
+    if asia_hit:
+        score += int(getattr(config, "ASIA_GRAB_BOOST", 12))
     if btc_aligned and btc_regime and btc_regime.side:
         score += 6
     score += f_pts
@@ -525,13 +636,24 @@ def analyze(
     score = int(max(0, min(100, score)))
 
     min_needed = config.MIN_SCORE + (sess_adj if config.USE_SESSION_RULES else 0)
-    # corte más permisivo v8: deja pasar candidatos para ranking cross-sectional
-    if score < max(22, min_needed - 28):
+    if score < max(30, min_needed - 20):
+        return None
+
+    # v9 · entrada cerca del nivel (papel: lejos empeora win%)
+    if getattr(config, "REQUIRE_NEAR_LEVEL", True) and dist > config.NEAR_ATR:
+        return None
+
+    # v9 · opcional: solo ventana POST del clock pulse
+    if getattr(config, "REQUIRE_CLOCK_POST", False) and clk_tag != "POST":
+        return None
+
+    # v9 · opcional BTC alineado estricto
+    if getattr(config, "REQUIRE_BTC_ALIGN", False) and not btc_aligned:
         return None
 
     reason = (
         f"{src}{'·2nd' if second_test_hit else ''} RVOL {rvol_sw:.2f}x · age {box_age}t{box_touches} · "
-        f"resid {resid:+.2f}% · {sess} · fund {mins_f:.0f}m · clk {clk_tag}"
+        f"resid {resid:+.2f}% · {sess} · fund {mins_f:.0f}m · clk {clk_tag}" + (f" · ASIA w={asia_w:.1f}%" if asia_hit else "")
     )
     return Signal(
         symbol=symbol,
@@ -556,7 +678,7 @@ def analyze(
         second_test=bool(second_test_hit),
         fund_vel=float(fund_vel),
         compress=float(compress),
-        level_px=float(sup if side == 'LONG' else res),
+        level_px=float((asia_low if (asia_hit and side == 'LONG' and asia_low > 0) else sup) if side == 'LONG' else (asia_high if (asia_hit and asia_high > 0) else res)),
         oi_chg=float(oi_chg),
         basis_bps=float(basis_bps),
         session=sess,
@@ -607,16 +729,15 @@ def apply_cross_sectional(
     for s in candidates:
         rank = sum(1 for x in rvols if x <= s.rvol) / len(rvols) * 100.0
         s.xsec_pct = rank
-        need = pct_need if len(candidates) >= 4 else min(pct_need, 50.0)
-        # boost por residual/exclusividad altos
+        need = pct_need if len(candidates) >= 4 else min(pct_need, 55.0)
+        hard_xsec = float(getattr(config, "MIN_XSEC_PCT", pct_need))
         if s.resid_pct >= config.RESID_MIN_PCT:
             s.score = int(min(100, s.score + 5))
         if s.excl_pct >= config.RESID_MIN_PCT:
             s.score = int(min(100, s.score + 5))
-        ok = s.score >= floor and rank >= need
-        ok = ok or (s.score >= floor + 10 and rank >= need - 15)
-        # residual extremo puede compensar
-        if not ok and s.score >= floor and s.resid_pct >= 80:
+        ok = s.score >= floor and rank >= max(need, hard_xsec - 5)
+        # solo compensación residual si rank no es un desastre
+        if not ok and s.score >= floor + 5 and s.resid_pct >= 85 and rank >= hard_xsec - 20:
             ok = True
         if ok:
             s.score = int(min(100, s.score + int(max(0, rank - need) / 5)))
